@@ -1,8 +1,5 @@
 
 
-
-
-
 % some details regarding conversions etc 
 D2si = 0.01^2/60; % convert creep slopes fitted to SI units (measurements are in cm/min)
 Eta2si = 0.01/60; % convert linear slopes fitted to SI units (measurements are in cm/min)
@@ -47,6 +44,12 @@ stdarr = NaN(numfiles,1+round((eexpy-bexpy)/expyr)); % stats of residuals
 kurtarr = NaN(numfiles,1+round((eexpy-bexpy)/expyr)); % kurtosis stats of residuals
 skewarr = NaN(numfiles,1+round((eexpy-bexpy)/expyr)); % skewness stats of residuals
 distopyarr = NaN(numfiles,1+round((eexpy-bexpy)/expyr)); % distance to optimum
+
+% extract prefactors for all non fits (new for these data)
+fitexpyarr = bexpy:expyr:eexpy;
+slopearr_nonlin = NaN(numfiles,length(fitexpyarr));
+offsetarr_nonlin = NaN(numfiles,length(fitexpyarr));
+exparr_nonlin = NaN(numfiles,length(fitexpyarr));
 
 %save exponents to memory
 bestexparr = NaN(numfiles,1); 
@@ -109,9 +112,6 @@ for i=1:numfiles
     % fit poly1, offset should be zero hence added point at origin
     [fitobj,gof2] = fit(xtmp',deltatmp','poly1');
     
-    %figure
-    %plot(fitobj,xtmp',deltatmp')
-    
     tmp = coeffvalues(fitobj);    
     slopearr_lin(i) = tmp(1);
     offsetarr_lin(i) = tmp(2);
@@ -125,14 +125,28 @@ for i=1:numfiles
     ctr = 0;
     for expy = bexpy:expyr:eexpy
         ctr = ctr + 1;
-        opty = fitoptions('power2','Lower', [0,expy,-10], 'Upper', [Inf,expy,10]);
+        opty = fitoptions('power2','Lower', [0,expy,-.00010], 'Upper', [Inf,expy,0.000010]);
        [fitobj,gof2] = fit(xtmp',deltatmp','power2',opty);
        expyarr(i,ctr) = gof2.rsquare;
        %thought: check stats of residuals
        resi = fitobj(xtmp)-deltatmp';
        stdarr(i,ctr) = nanstd(resi);
        kurtarr(i,ctr) = kurtosis(resi);
-       skewarr(i,ctr) = skewness(resi);  
+       skewarr(i,ctr) = skewness(resi); 
+       
+       % new part: add prefactors for all exponents
+       coiffure = coeffvalues(fitobj);
+
+       exparr_nonlin(i,ctr) = expy; 
+       slopearr_nonlin(i,ctr) = coiffure(1);
+       offsetarr_nonlin(i,ctr) = coiffure(3);
+
+       %figure
+       %plot(fitobj,xtmp',deltatmp')
+       %title(horzcat('expy = ', num2str(expy)))
+
+       %pause(.1)
+
     end
     [~,indexy] = max(expyarr(i,:));
     bestexparr(i) = bexpy+(indexy-1)*expyr;
@@ -198,6 +212,10 @@ sloperhocyl = 26;
 platycyl = 2E-6;
 Dsigmsp = 3.75E-5;
 Dsigmcyl = 9E-4;
+
+%% save the data to a mat file for later re-use
+
+save('PRL_data.mat','-mat')
 
 %% make the first overview figure 
 
@@ -714,3 +732,155 @@ set(gca,'Yscale','log')
 print('figSI', '-depsc','-r600')
 print('figSI', '-dpdf', '-bestfit')
 
+%% EXTRA figure log-log scale version Fig 1
+
+
+figure(6)
+
+indexchoice = 26;
+
+lidchoice = 1;
+alphy = 1/fitexpyarr(indexchoice);
+
+subplot 221
+cmap = colormap(parula(length(unique(densarr(masksp)))));
+
+for i=1:1:length(masksp)
+    
+    %indexer = find(densarruniq==densarr(masksp(i)));
+    indexer = find(unique(densarr(masksp))==densarr(masksp(i)));
+    
+    if densarr(masksp(i)) < lintreshsp
+       
+        scatter(timearr(masksp(i),:)*60,displarr(masksp(i),:)*0.01, 'k'); %,'MarkerEdgeColor',cmap(indexer,:))
+        hold on
+        plot(timearr(masksp(i),:)*60,displarr(masksp(i),:)*0.01, 'k')%,'Color',cmap(indexer,:))
+
+        if ~isnan(errarr(masksp(i))) 
+            errorbar(timearr(masksp(i),:)*60,displarr(masksp(i),:)*0.01,errarr(masksp(i),:)*0.01,'k')%,'Color',cmap(indexer,:))
+            fprintf('errorrrrrrrrrr %d\n', expy)
+        end
+        
+        
+    end
+    
+end
+
+set(gca,'Xscale','log')
+set(gca,'Yscale','log')
+
+plot([10,100000],0.0015*[10,100000].^0.5,'-.k')
+plot([10,100000],0.0015*[10,100000].^0.4,':k')
+plot([10,100000],0.0015*[10,100000].^0.6,':k')
+
+
+box on
+xlabel('t [sec]')
+ylabel('\delta [m]')
+text(2000,.0035,'(a)','FontSize',18)
+%set(gca,'Yscale','log')
+%set(gca,'Xscale','log')
+xlim([20, 5000])
+ylim([0.002,0.2])
+ax=gca;
+ax.FontSize = 14;
+hold off
+
+
+
+subplot 222
+
+for i=length(masksp):-1:1
+    
+    indexer = find(unique(densarr(masksp))==densarr(masksp(i)));
+    
+    if densarr(masksp(i)) < lintreshsp
+       
+        plot(timearr(masksp(i),:)*60,(displarr(masksp(i),:).^alphy)/(10000*(slopearr_nonlin(masksp(i),indexchoice).^alphy)*D2si),'-ok')
+
+        %convert D to proper units, but also the war time and displacement data
+        hold on
+        
+    end
+    
+end
+plot([10,10000],[10,10000],'-.k')
+xlabel('t [sec]')
+ylabel(horzcat('\delta^{',num2str(alphy),'}/D [A.U]'))
+text(2000,8.5,'(b)','FontSize',18)
+xlim([20, 5000])
+ylim([4,5000])
+ax=gca;
+ax.FontSize = 14;
+hold off
+
+set(gca,'Xscale','log')
+set(gca,'Yscale','log')
+
+% save
+print('figextra', '-depsc','-r600')
+print('figextra', '-dpdf', '-bestfit')
+
+%% Verify nonlinearity with lid 
+% indexchoice = 13 corresponds to an exponent of 0.5
+
+indexchoice = 13;
+
+lidchoice = 1;
+alphy = 1/fitexpyarr(indexchoice);
+
+masklid = 1:length(densarr);
+
+figure(10)
+
+subplot(2,2,[1 2])
+cmap = colormap(parula(length(unique(stressarr(masklid)))));
+
+for i=1:1:length(masklid)
+    
+    indexer = find(unique(stressarr(masklid))==stressarr(masklid(i)));
+ 
+    scatter(timearr(masklid(i),:)*60,displarr(masklid(i),:), 'k','MarkerEdgeColor',cmap(indexer,:))
+    hold on
+    plot(timearr(masklid(i),:)*60,displarr(masklid(i),:), 'k','Color',cmap(indexer,:))
+
+    
+end
+
+box on
+xlabel('t [sec]')
+ylabel('\delta [cm]')
+xlim([0 4000])
+ylim([.0, 10])
+ax=gca;
+ax.FontSize = 14;
+hold off
+
+subplot 223
+
+for i=1:1:length(masklid) 
+    
+    indexer = find(unique(stressarr(masklid))==stressarr(masklid(i)));
+
+    scatter(timearr(masklid(i),:)*60,(displarr(masklid(i),:)./slopearr_nonlin(masklid(i),indexchoice)).^alphy, 'k','MarkerEdgeColor',cmap(indexer,:))
+    hold on
+
+end
+
+plot([10,10000],0.015*[10,10000],'-.k')
+
+box on
+xlabel('t [sec]')
+ylabel(horzcat('(\delta\eta_{eff})^{',num2str(alphy,3),'} [A.U]'))
+ax=gca;
+ax.FontSize = 14;
+hold off
+
+clim([0,250])
+xlim([20 8000])
+ylim([1E-2, 2E2])
+set(gca,'Yscale','log')
+set(gca,'Xscale','log')
+
+%save
+print('Checknl', '-dpdf', '-bestfit')
